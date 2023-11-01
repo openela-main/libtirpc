@@ -1,0 +1,51 @@
+commit a013336ecdc476d7357398d9cd24b114070bb767
+Author: Rosen Penev <rosenp@gmail.com>
+Date:   Tue Oct 25 12:34:56 2022 -0400
+
+    Add missing extern
+    
+    Fixes compilation warning.
+    
+    Signed-off-by: Rosen Penev <rosenp@gmail.com>
+    Signed-off-by: Steve Dickson <steved@redhat.com>
+
+diff --git a/src/svc_auth.c b/src/svc_auth.c
+index ce8bbd8..789d6af 100644
+--- a/src/svc_auth.c
++++ b/src/svc_auth.c
+@@ -66,6 +66,9 @@ static struct authsvc *Auths = NULL;
+ 
+ extern SVCAUTH svc_auth_none;
+ 
++#ifdef AUTHDES_SUPPORT
++extern enum auth_stat _svcauth_des(struct svc_req *rqst, struct rpc_msg *msg);
++#endif
+ /*
+  * The call rpc message, msg has been obtained from the wire.  The msg contains
+  * the raw form of credentials and verifiers.  authenticate returns AUTH_OK
+
+commit 55526c52a449907e4d34b829b96141afab530b23
+Author: Zhi Li <yieli@redhat.com>
+Date:   Mon Oct 24 13:46:54 2022 -0400
+
+    bindresvport.c: fix a potential resource leakage
+    
+    Close the FILE *fp of load_blacklist() in another
+    return path to avoid potential resource leakage.
+    
+    Fixes: https://bugzilla.redhat.com/show_bug.cgi?id=2135405
+    Signed-off-by: Zhi Li <yieli@redhat.com>
+    Signed-off-by: Steve Dickson <steved@redhat.com>
+
+diff --git a/src/bindresvport.c b/src/bindresvport.c
+index 5c0ddcf..efeb1cc 100644
+--- a/src/bindresvport.c
++++ b/src/bindresvport.c
+@@ -130,6 +130,7 @@ load_blacklist (void)
+ 	  if (list == NULL)
+ 	    {
+ 	      free (buf);
++	      fclose (fp);
+ 	      return;
+ 	    }
+ 	}
