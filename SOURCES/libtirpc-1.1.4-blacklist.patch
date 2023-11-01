@@ -1,0 +1,15 @@
+diff -up libtirpc-1.1.4/doc/bindresvport.blacklist.save libtirpc-1.1.4/doc/bindresvport.blacklist
+--- libtirpc-1.1.4/doc/bindresvport.blacklist.save	2021-04-17 13:04:20.092274589 -0400
++++ libtirpc-1.1.4/doc/bindresvport.blacklist	2021-04-17 13:04:45.609945925 -0400
+@@ -8,6 +8,11 @@
+ 631     # cups
+ 636     # ldaps
+ 664     # Secure ASF, used by IPMI on some cards
++749     # Kerberos V kadmin
++774     # rpasswd
++873     # rsyncd
+ 921     # lwresd
++992     # SSL-enabled telnet
+ 993     # imaps
++994     # irc
+ 995     # pops

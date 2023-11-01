@@ -1,0 +1,68 @@
+diff -up libtirpc-1.1.4/src/svc_vc.c.orig libtirpc-1.1.4/src/svc_vc.c
+--- libtirpc-1.1.4/src/svc_vc.c.orig	2018-08-27 10:06:49.000000000 -0400
++++ libtirpc-1.1.4/src/svc_vc.c	2019-07-24 11:51:32.191485387 -0400
+@@ -502,9 +502,14 @@ read_vc(xprtp, buf, len)
+ 	cfp = (struct cf_conn *)xprt->xp_p1;
+ 
+ 	if (cfp->nonblock) {
++		/* Since len == 0 is returned on zero length
++		 * read or EOF errno needs to be reset before
++		 * the read
++		 */
++		errno = 0;
+ 		len = read(sock, buf, (size_t)len);
+ 		if (len < 0) {
+-			if (errno == EAGAIN)
++			if (errno == EAGAIN || errno == EWOULDBLOCK)
+ 				len = 0;
+ 			else
+ 				goto fatal_err;
+diff -up libtirpc-1.1.4/src/xdr_rec.c.orig libtirpc-1.1.4/src/xdr_rec.c
+--- libtirpc-1.1.4/src/xdr_rec.c.orig	2018-08-27 10:06:49.000000000 -0400
++++ libtirpc-1.1.4/src/xdr_rec.c	2019-07-24 11:51:32.191485387 -0400
+@@ -61,6 +61,7 @@
+ #include <rpc/svc.h>
+ #include <rpc/clnt.h>
+ #include <stddef.h>
++#include <errno.h>
+ #include "rpc_com.h"
+ static bool_t	xdrrec_getlong(XDR *, long *);
+ static bool_t	xdrrec_putlong(XDR *, const long *);
+@@ -537,7 +538,13 @@ __xdrrec_getrec(xdrs, statp, expectdata)
+ 		n = rstrm->readit(rstrm->tcp_handle, rstrm->in_hdrp,
+ 		    (int)sizeof (rstrm->in_header) - rstrm->in_hdrlen);
+ 		if (n == 0) {
+-			*statp = expectdata ? XPRT_DIED : XPRT_IDLE;
++			/* EAGAIN or EWOULDBLOCK means a zero length
++			 * read not an EOF.
++			 */
++			if (errno == EAGAIN || errno == EWOULDBLOCK)
++				*statp = XPRT_IDLE;
++			else
++				*statp = expectdata ? XPRT_DIED : XPRT_IDLE;
+ 			return FALSE;
+ 		}
+ 		if (n < 0) {
+@@ -564,6 +571,7 @@ __xdrrec_getrec(xdrs, statp, expectdata)
+ 			rstrm->in_header &= ~LAST_FRAG;
+ 			rstrm->last_frag = TRUE;
+ 		}
++		rstrm->in_haveheader = 1;
+ 	}
+ 
+ 	n =  rstrm->readit(rstrm->tcp_handle,
+@@ -576,7 +584,13 @@ __xdrrec_getrec(xdrs, statp, expectdata)
+ 	}
+ 
+ 	if (n == 0) {
+-		*statp = expectdata ? XPRT_DIED : XPRT_IDLE;
++		/* EAGAIN or EWOULDBLOCK means a zero length
++		 * read not an EOF.
++		 */
++		if (errno == EAGAIN || errno == EWOULDBLOCK)
++			*statp = XPRT_IDLE;
++		else
++			*statp = expectdata ? XPRT_DIED : XPRT_IDLE;
+ 		return FALSE;
+ 	}
+ 

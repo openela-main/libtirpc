@@ -1,0 +1,88 @@
+diff -up libtirpc-1.1.4/man/rpcbind.3t.orig libtirpc-1.1.4/man/rpcbind.3t
+--- libtirpc-1.1.4/man/rpcbind.3t.orig	2018-08-27 10:06:49.000000000 -0400
++++ libtirpc-1.1.4/man/rpcbind.3t	2022-08-02 11:21:30.134642780 -0400
+@@ -187,6 +187,8 @@ in
+ .El
+ .Sh AVAILABILITY
+ These functions are part of libtirpc.
++.Sh ENVIRONMENT
++If RPCB_V2FIRST is defined, rpcbind protocol version tryout algorithm changes from v4,v2,v3 to v2,v4,v3.
+ .Sh SEE ALSO
+ .Xr rpc_clnt_calls 3 ,
+ .Xr rpc_svc_calls 3 ,
+diff -up libtirpc-1.1.4/src/rpcb_clnt.c.orig libtirpc-1.1.4/src/rpcb_clnt.c
+--- libtirpc-1.1.4/src/rpcb_clnt.c.orig	2022-08-02 11:20:42.795833195 -0400
++++ libtirpc-1.1.4/src/rpcb_clnt.c	2022-08-02 11:21:30.135642797 -0400
+@@ -818,7 +818,8 @@ error:
+  * The algorithm used: If the transports is TCP or UDP, it first tries
+  * version 4 (srv4), then 3 and then fall back to version 2 (portmap).
+  * With this algorithm, we get performance as well as a plan for
+- * obsoleting version 2.
++ * obsoleting version 2. This behaviour is reverted to old algorithm
++ * if RPCB_V2FIRST environment var is defined
+  *
+  * For all other transports, the algorithm remains as 4 and then 3.
+  *
+@@ -839,6 +840,10 @@ __rpcb_findaddr_timed(program, version,
+ #ifdef NOTUSED
+ 	static bool_t check_rpcbind = TRUE;
+ #endif
++
++#ifdef PORTMAP
++	static bool_t portmap_first = FALSE;
++#endif
+ 	CLIENT *client = NULL;
+ 	RPCB parms;
+ 	enum clnt_stat clnt_st;
+@@ -895,8 +900,18 @@ __rpcb_findaddr_timed(program, version,
+ 		parms.r_addr = (char *) &nullstring[0];
+ 	}
+ 
+-	/* First try from start_vers(4) and then version 3 (RPCBVERS) */
++	/* First try from start_vers(4) and then version 3 (RPCBVERS), except
++	 * if env. var RPCB_V2FIRST is defined */
++
++#ifdef PORTMAP
++	if (getenv(V2FIRST)) {
++		portmap_first = TRUE;
++		LIBTIRPC_DEBUG(3, ("__rpcb_findaddr_timed: trying v2-port first\n"));
++		goto portmap;
++	}
++#endif
+ 
++rpcbind:
+ 	CLNT_CONTROL(client, CLSET_RETRY_TIMEOUT, (char *) &rpcbrmttime);
+ 	for (vers = start_vers;  vers >= RPCBVERS; vers--) {
+ 		/* Set the version */
+@@ -944,10 +959,17 @@ __rpcb_findaddr_timed(program, version,
+ 	}
+ 
+ #ifdef PORTMAP 	/* Try version 2 for TCP or UDP */
++	if (portmap_first)
++		goto error; /* we tried all versions if reached here */
++portmap:
+ 	if (strcmp(nconf->nc_protofmly, NC_INET) == 0) {
+ 		address = __try_protocol_version_2(program, version, nconf, host, tp);
+-		if (address == NULL)
+-			goto error;
++		if (address == NULL) {
++			if (portmap_first)
++				goto rpcbind;
++			else
++				goto error;
++		}
+ 	}
+ #endif		/* PORTMAP */
+ 
+diff -up libtirpc-1.1.4/tirpc/rpc/pmap_prot.h.orig libtirpc-1.1.4/tirpc/rpc/pmap_prot.h
+--- libtirpc-1.1.4/tirpc/rpc/pmap_prot.h.orig	2018-08-27 10:06:49.000000000 -0400
++++ libtirpc-1.1.4/tirpc/rpc/pmap_prot.h	2022-08-02 11:21:30.135642797 -0400
+@@ -84,6 +84,8 @@
+ #define PMAPPROC_DUMP		((u_long)4)
+ #define PMAPPROC_CALLIT		((u_long)5)
+ 
++#define V2FIRST		"RPCB_V2FIRST"
++
+ struct pmap {
+ 	long unsigned pm_prog;
+ 	long unsigned pm_vers;
