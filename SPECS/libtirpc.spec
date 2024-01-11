@@ -2,7 +2,7 @@
 
 Name:			libtirpc
 Version:		1.3.3
-Release:		1%{?dist}
+Release:		2%{?dist}
 Summary:		Transport Independent RPC Library
 License:		SISSL and BSD
 URL:  			http://git.linux-nfs.org/?p=steved/libtirpc.git;a=summary
@@ -18,6 +18,11 @@ BuildRequires: make
 #
 Patch001: libtirpc-1.3.3-blacklist-close.patch
 Patch002: libtirpc-1.3.3-clnt-raw-ptr.patch
+
+#
+# RHEL9.2
+#
+Patch003: libtirpc-1.3.3-dos-sleep.patch
 
 %description
 This package contains SunLib's implementation of transport-independent
@@ -118,6 +123,9 @@ mv %{buildroot}%{_mandir}/man3 %{buildroot}%{_mandir}/man3t
 %{_mandir}/*/*
 
 %changelog
+* Thu May 18 2023 Steve Dickson <steved@redhat.com> - 1.3.3-2
+- getnetconfigent: avoid potential DoS (bz 2150611)
+
 * Thu Nov 03 2022 Steve Dickson <steved@redhat.com> - 1.3.3-1
 - bindresvport.c: fix a potential resource leakage (bz 2135405)
 - clnt_raw.c: fix a possible null pointer dereference (bz 2138317)

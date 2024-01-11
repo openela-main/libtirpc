@@ -1,0 +1,31 @@
+commit f7f0abdf267698de3f74a0285405b1b01f40893b
+Author: Zhi Li <yieli@redhat.com>
+Date:   Wed Jan 11 11:19:31 2023 -0500
+
+    getnetconfigent: avoid potential DoS issue by removing unnecessary sleep
+    
+    By adapting CodeChecker for libtirpc related tests, it complains
+    an improper waiting time for function getnetconfigent with
+    a valid input value, either it should be treated as a wrong
+    input or just take it as a proper value without sleeping
+    
+    link: https://bugzilla.redhat.com/show_bug.cgi?id=2150611
+    Signed-off-by: Zhi Li <yieli@redhat.com>
+    Signed-off-by: Steve Dickson <steved@redhat.com>
+
+diff --git a/src/getnetconfig.c b/src/getnetconfig.c
+index cfd33c2..d547dce 100644
+--- a/src/getnetconfig.c
++++ b/src/getnetconfig.c
+@@ -436,11 +436,6 @@ getnetconfigent(netid)
+ 	fprintf(stderr, "in /etc/netconfig.\n");
+ 	fprintf(stderr, "Please change this to \"local\" manually ");
+ 	fprintf(stderr, "or run mergemaster(8).\n");
+-	fprintf(stderr, "See UPDATING entry 20021216 for details.\n");
+-	fprintf(stderr, "Continuing in 10 seconds\n\n");
+-	fprintf(stderr, "This warning will be removed 20030301\n");
+-	sleep(10);
+-
+     }
+ 
+     /*
