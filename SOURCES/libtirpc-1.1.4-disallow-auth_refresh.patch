@@ -1,0 +1,76 @@
+diff -up libtirpc-1.1.4/src/auth_gss.c.orig libtirpc-1.1.4/src/auth_gss.c
+--- libtirpc-1.1.4/src/auth_gss.c.orig	2021-04-17 13:11:03.229880600 -0400
++++ libtirpc-1.1.4/src/auth_gss.c	2021-04-17 13:15:10.722391798 -0400
+@@ -982,3 +982,9 @@ rpc_gss_max_data_length(AUTH *auth, int
+ 	rpc_gss_clear_error();
+ 	return result;
+ }
++
++bool_t
++is_authgss_client(CLIENT *clnt)
++{
++	return (clnt->cl_auth->ah_ops == &authgss_ops);
++}
+diff -up libtirpc-1.1.4/src/clnt_dg.c.orig libtirpc-1.1.4/src/clnt_dg.c
+--- libtirpc-1.1.4/src/clnt_dg.c.orig	2018-08-27 10:06:49.000000000 -0400
++++ libtirpc-1.1.4/src/clnt_dg.c	2021-04-17 13:15:10.722391798 -0400
+@@ -60,6 +60,9 @@
+ #include <sys/uio.h>
+ #endif
+ 
++#ifdef HAVE_RPCSEC_GSS
++#include <rpc/auth_gss.h>
++#endif
+ 
+ #define MAX_DEFAULT_FDS                 20000
+ 
+@@ -356,6 +359,11 @@ clnt_dg_call(cl, proc, xargs, argsp, xre
+ 		salen = cu->cu_rlen;
+ 	}
+ 
++#ifdef HAVE_RPCSEC_GSS
++	if (is_authgss_client(cl))
++		nrefreshes = 0;
++#endif
++
+ 	/* Clean up in case the last call ended in a longjmp(3) call. */
+ call_again:
+ 	xdrs = &(cu->cu_outxdrs);
+diff -up libtirpc-1.1.4/src/clnt_vc.c.orig libtirpc-1.1.4/src/clnt_vc.c
+--- libtirpc-1.1.4/src/clnt_vc.c.orig	2018-08-27 10:06:49.000000000 -0400
++++ libtirpc-1.1.4/src/clnt_vc.c	2021-04-17 13:15:10.723391824 -0400
+@@ -68,6 +68,10 @@
+ #include <rpc/rpc.h>
+ #include "rpc_com.h"
+ 
++#ifdef HAVE_RPCSEC_GSS
++#include <rpc/auth_gss.h>
++#endif
++
+ #define MCALL_MSG_SIZE 24
+ 
+ #define CMGROUP_MAX    16
+@@ -380,6 +384,11 @@ clnt_vc_call(cl, proc, xdr_args, args_pt
+ 	    (xdr_results == NULL && timeout.tv_sec == 0
+ 	    && timeout.tv_usec == 0) ? FALSE : TRUE;
+ 
++#ifdef HAVE_RPCSEC_GSS
++	if (is_authgss_client(cl))
++		refreshes = 0;
++#endif
++
+ call_again:
+ 	xdrs->x_op = XDR_ENCODE;
+ 	ct->ct_error.re_status = RPC_SUCCESS;
+diff -up libtirpc-1.1.4/tirpc/rpc/auth_gss.h.orig libtirpc-1.1.4/tirpc/rpc/auth_gss.h
+--- libtirpc-1.1.4/tirpc/rpc/auth_gss.h.orig	2018-08-27 10:06:49.000000000 -0400
++++ libtirpc-1.1.4/tirpc/rpc/auth_gss.h	2021-04-17 13:15:10.723391824 -0400
+@@ -120,6 +120,8 @@ void	gss_log_debug		(const char *fmt, ..
+ void	gss_log_status		(char *m, OM_uint32 major, OM_uint32 minor);
+ void	gss_log_hexdump		(const u_char *buf, int len, int offset);
+ 
++bool_t	is_authgss_client	(CLIENT *);
++
+ #ifdef __cplusplus
+ }
+ #endif
