@@ -1,0 +1,23 @@
+commit 6951a9c3139c9c7dbb0bdae70737996011fc7a37
+Author: Herb Wartens <wartens2@llnl.gov>
+Date:   Mon Mar 18 11:07:15 2024 -0400
+
+    rpcb_clnt.c: memory leak in destroy_addr
+    
+    Piece was dropped from original fix.
+    
+    Fixes: https://bugzilla.redhat.com/show_bug.cgi?id=2225226
+    Signed-off-by: Steve Dickson <steved@redhat.com>
+
+diff --git a/src/rpcb_clnt.c b/src/rpcb_clnt.c
+index 68fe69a..d909efc 100644
+--- a/src/rpcb_clnt.c
++++ b/src/rpcb_clnt.c
+@@ -121,6 +121,7 @@ destroy_addr(addr)
+ 			free(addr->ac_taddr->buf);
+ 			addr->ac_taddr->buf = NULL;
+ 		}
++		free(addr->ac_taddr);
+ 		addr->ac_taddr = NULL;
+ 	}
+ 	free(addr);

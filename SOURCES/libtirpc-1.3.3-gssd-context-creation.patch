@@ -1,0 +1,30 @@
+commit 22b1c0cd6076dcd7df822cd1181e98278dc865db
+Author: Olga Kornievskaia <kolga@netapp.com>
+Date:   Wed Jan 3 17:50:42 2024 -0500
+
+    gssapi: fix rpc_gss_seccreate passed in cred
+    
+    Fix rpc_gss_seccreate() usage of the passed in gss credential.
+    
+    Fixes: 5f1fe4dde861 ("Pass time_req and input_channel_bindings through to init_sec_context")
+    
+    Reviewed-by: Chuck Lever <chuck.lever@oracle.com>
+    Signed-off-by: Olga Kornievskaia <kolga@netapp.com>
+    Signed-off-by: Steve Dickson <steved@redhat.com>
+
+diff --git a/src/auth_gss.c b/src/auth_gss.c
+index e317664..9d18f96 100644
+--- a/src/auth_gss.c
++++ b/src/auth_gss.c
+@@ -842,9 +842,9 @@ rpc_gss_seccreate(CLIENT *clnt, char *principal, char *mechanism,
+ 	gd->sec = sec;
+ 
+ 	if (req) {
+-		sec.req_flags = req->req_flags;
++		gd->sec.req_flags = req->req_flags;
+ 		gd->time_req = req->time_req;
+-		sec.cred = req->my_cred;
++		gd->sec.cred = req->my_cred;
+ 		gd->icb = req->input_channel_bindings;
+ 	}
+ 

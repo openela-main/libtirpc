@@ -2,7 +2,7 @@
 
 Name:			libtirpc
 Version:		1.3.3
-Release:		2%{?dist}
+Release:		8%{?dist}
 Summary:		Transport Independent RPC Library
 License:		SISSL and BSD
 URL:  			http://git.linux-nfs.org/?p=steved/libtirpc.git;a=summary
@@ -23,6 +23,14 @@ Patch002: libtirpc-1.3.3-clnt-raw-ptr.patch
 # RHEL9.2
 #
 Patch003: libtirpc-1.3.3-dos-sleep.patch
+
+#
+# RHEL9.4
+#
+Patch004: libtirpc-1.3.3-null-ptrs-not-reused.patch
+Patch005: libtirpc-1.3.3-gssd-context-creation.patch
+Patch006: libtirpc-1.3.3-double-free.patch
+Patch007: libtirpc-1.3.3-null-ptrs-not-reused-fixed.patch
 
 %description
 This package contains SunLib's implementation of transport-independent
@@ -123,6 +131,24 @@ mv %{buildroot}%{_mandir}/man3 %{buildroot}%{_mandir}/man3t
 %{_mandir}/*/*
 
 %changelog
+* Tue Mar 19 2024 Steve Dickson <steved@redhat.com> - 1.3.3-8
+- rpcb_clnt.c (fixed): Eliminate double frees in delete_cache() (RHEL-11183)
+
+* Wed Mar 13 2024 Steve Dickson <steved@redhat.com> - 1.3.3-7
+- exception build (RHEL-11183)
+
+* Tue Mar  5 2024 Steve Dickson <steved@redhat.com> - 1.3.3-6
+- rpcb_clnt.c: Eliminate double frees in delete_cache() (RHEL-11183)
+
+* Mon Mar  4 2024 Steve Dickson <steved@redhat.com> - 1.3.3-5
+- Fix rpc_gss_seccreate() usage of the passed in gss credential. (RHEL-27936)
+
+* Mon Feb 19 2024 Pavel Reichl <preichl@redhat.com> - 1.3.3-4
+- Add gating tests (rhel-7883)
+
+* Tue Jan  2 2024 Steve Dickson <steved@redhat.com> - 1.3.3-3
+- Null pointers so they are not used again (RHEL-11371)
+
 * Thu May 18 2023 Steve Dickson <steved@redhat.com> - 1.3.3-2
 - getnetconfigent: avoid potential DoS (bz 2150611)
 
