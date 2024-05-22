@@ -1,0 +1,48 @@
+commit 89c63bdfd79b1c94384daaaa03a9e3582540f843
+Author: Herb Wartens <wartens2@llnl.gov>
+Date:   Tue Aug 1 10:21:42 2023 -0400
+
+    rpcb_clnt.c: memory leak in destroy_addr
+    
+    Null pointers so they are not used again
+    
+    Fixes: https://bugzilla.redhat.com/show_bug.cgi?id=2225226
+    Signed-off-by: Steve Dickson <steved@redhat.com>
+
+diff --git a/src/rpcb_clnt.c b/src/rpcb_clnt.c
+index d178d86..c0a9e12 100644
+--- a/src/rpcb_clnt.c
++++ b/src/rpcb_clnt.c
+@@ -104,17 +104,27 @@ destroy_addr(addr)
+ {
+ 	if (addr == NULL)
+ 		return;
+-	if(addr->ac_host != NULL)
++	if (addr->ac_host != NULL) {
+ 		free(addr->ac_host);
+-	if(addr->ac_netid != NULL)
++		addr->ac_host = NULL;
++	}
++	if (addr->ac_netid != NULL) {
+ 		free(addr->ac_netid);
+-	if(addr->ac_uaddr != NULL)
++		addr->ac_netid = NULL;
++	}
++	if (addr->ac_uaddr != NULL) {
+ 		free(addr->ac_uaddr);
+-	if(addr->ac_taddr != NULL) {
+-		if(addr->ac_taddr->buf != NULL)
++		addr->ac_uaddr = NULL;
++	}
++	if (addr->ac_taddr != NULL) {
++		if(addr->ac_taddr->buf != NULL) {
+ 			free(addr->ac_taddr->buf);
++			addr->ac_taddr->buf = NULL;
++		}
++		addr->ac_taddr = NULL;
+ 	}
+ 	free(addr);
++	addr = NULL;
+ }
+ 
+ /*

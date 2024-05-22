@@ -2,7 +2,7 @@
 
 Name:			libtirpc
 Version:		1.1.4
-Release:		8%{?dist}
+Release:		10%{?dist}
 Summary:		Transport Independent RPC Library
 Group:		  	System Environment/Libraries
 License:		SISSL and BSD
@@ -46,6 +46,12 @@ Patch007: libtirpc-1.1.4-dgcall-free.patch
 Patch008: libtirpc-1.1.4-v2proto-mech.patch
 # bz 2112116
 Patch009: libtirpc-1.1.4-multithr-cleanup.patch
+
+#
+# RHEL 8.10
+#
+Patch010: libtirpc-1.1.4-null-ptrs-not-reused.patch
+Patch011: libtirpc-1.1.4-double-free.patch
 
 BuildRequires:		automake, autoconf, libtool, pkgconfig
 BuildRequires:		krb5-devel
@@ -166,6 +172,12 @@ mv %{buildroot}%{_mandir}/man3 %{buildroot}%{_mandir}/man3t
 %{_mandir}/*/*
 
 %changelog
+* Tue Mar  5 2024 Steve Dickson <steved@redhat.com> 1.1.4-10
+- rpcb_clnt.c: Eliminate double frees in delete_cache() (RHEL-11293)
+
+* Mon Mar  4 2024 Steve Dickson <steved@redhat.com> 1.1.4-9
+- Null pointers so they are not used again (RHEL-11370)
+
 * Wed Aug  3 2022 Steve Dickson <steved@redhat.com> 1.1.4-8
 - rpcb_clnt.c add mechanism to try v2 protocol first (bz 2107650)
 - Multithreaded cleanup (bz 2112116)
