@@ -2,7 +2,7 @@
 
 Name:			libtirpc
 Version:		1.1.4
-Release:		10%{?dist}
+Release:		12%{?dist}
 Summary:		Transport Independent RPC Library
 Group:		  	System Environment/Libraries
 License:		SISSL and BSD
@@ -52,6 +52,8 @@ Patch009: libtirpc-1.1.4-multithr-cleanup.patch
 #
 Patch010: libtirpc-1.1.4-null-ptrs-not-reused.patch
 Patch011: libtirpc-1.1.4-double-free.patch
+Patch012: libtirpc-1.1.4-null-ptrs-not-reused-fixed.patch
+Patch013: libtirpc-1.1.4-ip_local_reserved_ports.patch
 
 BuildRequires:		automake, autoconf, libtool, pkgconfig
 BuildRequires:		krb5-devel
@@ -172,6 +174,12 @@ mv %{buildroot}%{_mandir}/man3 %{buildroot}%{_mandir}/man3t
 %{_mandir}/*/*
 
 %changelog
+* Fri Apr 26 2024 Steve Dickson <steved@redhat.com> 1.1.4-12
+- binddynport.c honor ip_local_reserved_ports (RHEL-27005)
+
+* Tue Mar 19 2024 Steve Dickson <steved@redhat.com> 1.1.4-11
+- rpcb_clnt.c (fixed): Eliminate double frees in delete_cache() (RHEL-11293)
+
 * Tue Mar  5 2024 Steve Dickson <steved@redhat.com> 1.1.4-10
 - rpcb_clnt.c: Eliminate double frees in delete_cache() (RHEL-11293)
 
