@@ -2,7 +2,7 @@
 
 Name:			libtirpc
 Version:		1.3.3
-Release:		8%{?dist}
+Release:		9%{?dist}
 Summary:		Transport Independent RPC Library
 License:		SISSL and BSD
 URL:  			http://git.linux-nfs.org/?p=steved/libtirpc.git;a=summary
@@ -31,6 +31,11 @@ Patch004: libtirpc-1.3.3-null-ptrs-not-reused.patch
 Patch005: libtirpc-1.3.3-gssd-context-creation.patch
 Patch006: libtirpc-1.3.3-double-free.patch
 Patch007: libtirpc-1.3.3-null-ptrs-not-reused-fixed.patch
+
+#
+# RHEL9.5
+#
+Patch008: libtirpc-1.3.3-rpcbind-abstract.patch
 
 %description
 This package contains SunLib's implementation of transport-independent
@@ -131,6 +136,9 @@ mv %{buildroot}%{_mandir}/man3 %{buildroot}%{_mandir}/man3t
 %{_mandir}/*/*
 
 %changelog
+* Mon Jul 29 2024 Steve Dickson <steved@redhat.com> - 1.3.3-9
+- Support abstract addresses for rpcbind (RHEL-47027) 
+
 * Tue Mar 19 2024 Steve Dickson <steved@redhat.com> - 1.3.3-8
 - rpcb_clnt.c (fixed): Eliminate double frees in delete_cache() (RHEL-11183)
 

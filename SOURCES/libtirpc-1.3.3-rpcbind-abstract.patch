@@ -1,0 +1,322 @@
+diff --git a/src/rpc_com.h b/src/rpc_com.h
+index 76badef..ded72d1 100644
+--- a/src/rpc_com.h
++++ b/src/rpc_com.h
+@@ -60,6 +60,12 @@ bool_t __xdrrec_getrec(XDR *, enum xprt_stat *, bool_t);
+ void __xprt_unregister_unlocked(SVCXPRT *);
+ void __xprt_set_raddr(SVCXPRT *, const struct sockaddr_storage *);
+ 
++/* Evaluate to actual length of the `sockaddr_un' structure, whether
++ * abstract or not.
++ */
++#include <stddef.h>
++#define SUN_LEN_A(ptr) (offsetof(struct sockaddr_un, sun_path)	\
++			+ 1 + strlen((ptr)->sun_path + 1))
+ 
+ extern int __svc_maxrec;
+ 
+diff --git a/src/rpc_generic.c b/src/rpc_generic.c
+index aabbe4b..ee44c8d 100644
+--- a/src/rpc_generic.c
++++ b/src/rpc_generic.c
+@@ -650,7 +650,8 @@ __rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
+ 		if (path_len < 0)
+ 			return NULL;
+ 
+-		if (asprintf(&ret, "%.*s", path_len, sun->sun_path) < 0)
++		if (asprintf(&ret, "%c%.*s", sun->sun_path[0] ?: '@',
++			     path_len - 1, sun->sun_path + 1) < 0)
+ 			return (NULL);
+ 		break;
+ 	default:
+@@ -682,9 +683,10 @@ __rpc_uaddr2taddr_af(int af, const char *uaddr)
+ 
+ 	/*
+ 	 * AF_LOCAL addresses are expected to be absolute
+-	 * pathnames, anything else will be AF_INET or AF_INET6.
++	 * pathnames or abstract names, anything else will be
++	 * AF_INET or AF_INET6.
+ 	 */
+-	if (*addrstr != '/') {
++	if (*addrstr != '/' && *addrstr != '@') {
+ 		p = strrchr(addrstr, '.');
+ 		if (p == NULL)
+ 			goto out;
+@@ -747,6 +749,9 @@ __rpc_uaddr2taddr_af(int af, const char *uaddr)
+ 		strncpy(sun->sun_path, addrstr, sizeof(sun->sun_path) - 1);
+ 		ret->len = SUN_LEN(sun);
+ 		ret->maxlen = sizeof(struct sockaddr_un);
++		if (sun->sun_path[0] == '@')
++			/* Abstract address */
++			sun->sun_path[0] = '\0';
+ 		ret->buf = sun;
+ 		break;
+ 	default:
+@@ -834,6 +839,7 @@ __rpc_sockisbound(int fd)
+ 		struct sockaddr_un  usin;
+ 	} u_addr;
+ 	socklen_t slen;
++	int path_len;
+ 
+ 	slen = sizeof (struct sockaddr_storage);
+ 	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0)
+@@ -849,9 +855,9 @@ __rpc_sockisbound(int fd)
+ 			return (u_addr.sin6.sin6_port != 0);
+ #endif
+ 		case AF_LOCAL:
+-			/* XXX check this */
+-			memcpy(&u_addr.usin, &ss, sizeof(u_addr.usin)); 
+-			return (u_addr.usin.sun_path[0] != 0);
++			memcpy(&u_addr.usin, &ss, sizeof(u_addr.usin));
++			path_len = slen - offsetof(struct sockaddr_un, sun_path);
++			return path_len > 0;
+ 		default:
+ 			break;
+ 	}
+diff --git a/src/rpc_soc.c b/src/rpc_soc.c
+index fde121d..c6c93b5 100644
+--- a/src/rpc_soc.c
++++ b/src/rpc_soc.c
+@@ -701,7 +701,11 @@ svcunix_create(sock, sendsize, recvsize, path)
+ 	memset(&sun, 0, sizeof sun);
+ 	sun.sun_family = AF_LOCAL;
+ 	strncpy(sun.sun_path, path, (sizeof(sun.sun_path)-1));
+-	addrlen = sizeof(struct sockaddr_un);
++	if (sun.sun_path[0] == '@')
++		/* abstract address */
++		sun.sun_path[0] = '\0';
++
++	addrlen = SUN_LEN_A(&sun);
+ 	sa = (struct sockaddr *)&sun;
+ 
+ 	if (bind(sock, sa, addrlen) < 0)
+diff --git a/src/rpcb_clnt.c b/src/rpcb_clnt.c
+index 9838ebe..c2d554c 100644
+--- a/src/rpcb_clnt.c
++++ b/src/rpcb_clnt.c
+@@ -89,7 +89,7 @@ static struct address_cache *copy_of_cached(const char *, char *);
+ static void delete_cache(struct netbuf *);
+ static void add_cache(const char *, const char *, struct netbuf *, char *);
+ static CLIENT *getclnthandle(const char *, const struct netconfig *, char **);
+-static CLIENT *local_rpcb(void);
++static CLIENT *local_rpcb(char **targaddr);
+ #ifdef NOTUSED
+ static struct netbuf *got_entry(rpcb_entry_list_ptr, const struct netconfig *);
+ #endif
+@@ -431,19 +431,12 @@ getclnthandle(host, nconf, targaddr)
+ 	    nconf->nc_netid, si.si_af, si.si_proto, si.si_socktype));
+ 
+ 	if (nconf->nc_protofmly != NULL && strcmp(nconf->nc_protofmly, NC_LOOPBACK) == 0) {
+-		client = local_rpcb();
++		client = local_rpcb(targaddr);
+ 		if (! client) {
+ 			LIBTIRPC_DEBUG(1, ("getclnthandle: %s", 
+ 				clnt_spcreateerror("local_rpcb failed")));
+ 			goto out_err;
+ 		} else {
+-			struct sockaddr_un sun;
+-
+-			if (targaddr) {
+-				*targaddr = malloc(sizeof(sun.sun_path));
+-				strncpy(*targaddr, _PATH_RPCBINDSOCK,
+-				    sizeof(sun.sun_path));
+-			}
+ 			return (client);
+ 		}
+ 	} else {
+@@ -493,6 +486,8 @@ getclnthandle(host, nconf, targaddr)
+ 	if (res)
+ 		freeaddrinfo(res);
+ out_err:
++	if (client && targaddr &&!*targaddr)
++		fprintf(stderr, "No targaddr provided\n");
+ 	if (!client && targaddr)
+ 		free(*targaddr);
+ 	return (client);
+@@ -545,7 +540,8 @@ getpmaphandle(nconf, hostname, tgtaddr)
+  * rpcbind. Returns NULL on error and free's everything.
+  */
+ static CLIENT *
+-local_rpcb()
++local_rpcb(targaddr)
++	char **targaddr;
+ {
+ 	CLIENT *client;
+ 	static struct netconfig *loopnconf;
+@@ -555,34 +551,50 @@ local_rpcb()
+ 	size_t tsize;
+ 	struct netbuf nbuf;
+ 	struct sockaddr_un sun;
++	int i;
+ 
+ 	/*
+ 	 * Try connecting to the local rpcbind through a local socket
+-	 * first. If this doesn't work, try all transports defined in
+-	 * the netconfig file.
++	 * first - trying both addresses. If this doesn't work, try all
++	 * non-local transports defined in the netconfig file.
+ 	 */
+-	memset(&sun, 0, sizeof sun);
+-	sock = socket(AF_LOCAL, SOCK_STREAM, 0);
+-	if (sock < 0)
+-		goto try_nconf;
+-	sun.sun_family = AF_LOCAL;
+-	strcpy(sun.sun_path, _PATH_RPCBINDSOCK);
+-	nbuf.len = SUN_LEN(&sun);
+-	nbuf.maxlen = sizeof (struct sockaddr_un);
+-	nbuf.buf = &sun;
++	for (i = 0; i < 2; i++) {
++		memset(&sun, 0, sizeof sun);
++		sock = socket(AF_LOCAL, SOCK_STREAM, 0);
++		if (sock < 0)
++			goto try_nconf;
++		sun.sun_family = AF_LOCAL;
++		switch (i) {
++		case 0:
++			memcpy(sun.sun_path, _PATH_RPCBINDSOCK_ABSTRACT,
++			       sizeof(_PATH_RPCBINDSOCK_ABSTRACT));
++			break;
++		case 1:
++			strcpy(sun.sun_path, _PATH_RPCBINDSOCK);
++			break;
++		}
++		nbuf.len = SUN_LEN_A(&sun);
++		nbuf.maxlen = sizeof (struct sockaddr_un);
++		nbuf.buf = &sun;
+ 
+-	tsize = __rpc_get_t_size(AF_LOCAL, 0, 0);
+-	client = clnt_vc_create(sock, &nbuf, (rpcprog_t)RPCBPROG,
+-	    (rpcvers_t)RPCBVERS, tsize, tsize);
++		tsize = __rpc_get_t_size(AF_LOCAL, 0, 0);
++		client = clnt_vc_create(sock, &nbuf, (rpcprog_t)RPCBPROG,
++					(rpcvers_t)RPCBVERS, tsize, tsize);
+ 
+-	if (client != NULL) {
+-		/* Mark the socket to be closed in destructor */
+-		(void) CLNT_CONTROL(client, CLSET_FD_CLOSE, NULL);
+-		return client;
+-	}
++		if (client != NULL) {
++			/* Mark the socket to be closed in destructor */
++			(void) CLNT_CONTROL(client, CLSET_FD_CLOSE, NULL);
++			if (targaddr) {
++				if (sun.sun_path[0] == 0)
++					sun.sun_path[0] = '@';
++				*targaddr = strdup(sun.sun_path);
++			}
++			return client;
++		}
+ 
+-	/* Nobody needs this socket anymore; free the descriptor. */
+-	close(sock);
++		/* Nobody needs this socket anymore; free the descriptor. */
++		close(sock);
++	}
+ 
+ try_nconf:
+ 
+@@ -636,7 +648,7 @@ try_nconf:
+ 		endnetconfig(nc_handle);
+ 	}
+ 	mutex_unlock(&loopnconf_lock);
+-	client = getclnthandle(hostname, loopnconf, NULL);
++	client = getclnthandle(hostname, loopnconf, targaddr);
+ 	return (client);
+ }
+ 
+@@ -665,7 +677,7 @@ rpcb_set(program, version, nconf, address)
+ 		rpc_createerr.cf_stat = RPC_UNKNOWNADDR;
+ 		return (FALSE);
+ 	}
+-	client = local_rpcb();
++	client = local_rpcb(NULL);
+ 	if (! client) {
+ 		return (FALSE);
+ 	}
+@@ -716,7 +728,7 @@ rpcb_unset(program, version, nconf)
+ 	RPCB parms;
+ 	char uidbuf[32];
+ 
+-	client = local_rpcb();
++	client = local_rpcb(NULL);
+ 	if (! client) {
+ 		return (FALSE);
+ 	}
+@@ -772,7 +784,7 @@ got_entry(relp, nconf)
+ 
+ /*
+  * Quick check to see if rpcbind is up.  Tries to connect over
+- * local transport.
++ * local transport - first abstract, then regular.
+  */
+ bool_t
+ __rpcbind_is_up()
+@@ -799,15 +811,22 @@ __rpcbind_is_up()
+ 	if (sock < 0)
+ 		return (FALSE);
+ 	sun.sun_family = AF_LOCAL;
+-	strncpy(sun.sun_path, _PATH_RPCBINDSOCK, sizeof(sun.sun_path));
+ 
+-	if (connect(sock, (struct sockaddr *)&sun, sizeof(sun)) < 0) {
++	memcpy(sun.sun_path, _PATH_RPCBINDSOCK_ABSTRACT,
++	       sizeof(_PATH_RPCBINDSOCK_ABSTRACT));
++	if (connect(sock, (struct sockaddr *)&sun, SUN_LEN_A(&sun)) == 0) {
+ 		close(sock);
+-		return (FALSE);
++		return (TRUE);
++	}
++
++	strncpy(sun.sun_path, _PATH_RPCBINDSOCK, sizeof(sun.sun_path));
++	if (connect(sock, (struct sockaddr *)&sun, sizeof(sun)) == 0) {
++		close(sock);
++		return (TRUE);
+ 	}
+ 
+ 	close(sock);
+-	return (TRUE);
++	return (FALSE);
+ }
+ #endif
+ 
+@@ -1346,7 +1365,7 @@ rpcb_taddr2uaddr(nconf, taddr)
+ 		rpc_createerr.cf_stat = RPC_UNKNOWNADDR;
+ 		return (NULL);
+ 	}
+-	client = local_rpcb();
++	client = local_rpcb(NULL);
+ 	if (! client) {
+ 		return (NULL);
+ 	}
+@@ -1380,7 +1399,7 @@ rpcb_uaddr2taddr(nconf, uaddr)
+ 		rpc_createerr.cf_stat = RPC_UNKNOWNADDR;
+ 		return (NULL);
+ 	}
+-	client = local_rpcb();
++	client = local_rpcb(NULL);
+ 	if (! client) {
+ 		return (NULL);
+ 	}
+diff --git a/tirpc/rpc/rpcb_prot.h b/tirpc/rpc/rpcb_prot.h
+index 7ae48b8..eb3a0c4 100644
+--- a/tirpc/rpc/rpcb_prot.h
++++ b/tirpc/rpc/rpcb_prot.h
+@@ -477,6 +477,7 @@ extern bool_t xdr_netbuf(XDR *, struct netbuf *);
+ #define RPCBVERS_4 RPCBVERS4
+ 
+ #define _PATH_RPCBINDSOCK "/var/run/rpcbind.sock"
++#define _PATH_RPCBINDSOCK_ABSTRACT "\0/run/rpcbind.sock"
+ 
+ #else /* ndef _KERNEL */
+ #ifdef __cplusplus
+diff --git a/tirpc/rpc/rpcb_prot.x b/tirpc/rpc/rpcb_prot.x
+index b21ac3d..472c11f 100644
+--- a/tirpc/rpc/rpcb_prot.x
++++ b/tirpc/rpc/rpcb_prot.x
+@@ -411,6 +411,7 @@ program RPCBPROG {
+ %#define	RPCBVERS_4		RPCBVERS4
+ %
+ %#define	_PATH_RPCBINDSOCK	"/var/run/rpcbind.sock"
++%#define	_PATH_RPCBINDSOCK_ABSTRACT "\0/run/rpcbind.sock"
+ %
+ %#else		/* ndef _KERNEL */
+ %#ifdef __cplusplus
